@@ -1,5 +1,6 @@
 package br.com.kafka.advanced.elasticsearch;
 
+import br.com.kafka.advanced.config.KafkaConsumerConfig;
 import com.google.gson.JsonParser;
 import org.apache.http.HttpHost;
 import org.apache.http.auth.AuthScope;
@@ -7,11 +8,9 @@ import org.apache.http.auth.UsernamePasswordCredentials;
 import org.apache.http.client.CredentialsProvider;
 import org.apache.http.impl.client.BasicCredentialsProvider;
 import org.apache.http.impl.nio.client.HttpAsyncClientBuilder;
-import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
-import org.apache.kafka.common.serialization.StringDeserializer;
 import org.elasticsearch.action.bulk.BulkRequest;
 import org.elasticsearch.action.bulk.BulkResponse;
 import org.elasticsearch.action.index.IndexRequest;
@@ -25,8 +24,6 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.time.Duration;
-import java.util.Arrays;
-import java.util.Properties;
 
 public class ElasticSearchConsumerV2 {
 
@@ -42,24 +39,17 @@ public class ElasticSearchConsumerV2 {
         RestHighLevelClient client = createClient();
         KafkaConsumer<String,String> consumer = createConsumer("twitter-bolsonaro");
 
-
-        while(true) {
+        while(client != null ) {
 
             ConsumerRecords<String,String> records = consumer.poll(Duration.ofMillis(100));
-
             Integer recordsCount  = records.count();
             LOG.info("received  " + recordsCount + " records ");
-
             BulkRequest bulkRequest = new BulkRequest();
 
-
-
             for(ConsumerRecord<String,String> record : records) {
-
                 //2 strategies to generate id
                 //1  - kafka generic ID
                 //String  kafkaId = record.topic() + record.partition() + record.offset();
-
                 try
                 {
                     String id  = extractIdFromTweet(record.value());
@@ -86,46 +76,19 @@ public class ElasticSearchConsumerV2 {
                 LOG.info("Offsets have been commited ");
                 Thread.sleep(1000);
             }
-
         }
     }
 
-    private static  String extractIdFromTweet (String idTwtitter)
+    protected static  String extractIdFromTweet (String idTwtitter)
     {
         //using the jason parser to get a especific field to json twitter
-
         return jsonParser.parse(idTwtitter).getAsJsonObject().get("id_str").getAsString();
-
-
     }
 
-
-    public static KafkaConsumer<String, String> createConsumer(String topic)
+    protected static KafkaConsumer<String, String> createConsumer(String topic)
     {
-        //Consumer configs
-        String bootStrapServers  = "127.0.0.1:9092";
-        String groupId  = "elasticsearch-demo";
-
-        Properties properties = new Properties();
-        properties.setProperty(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG,bootStrapServers );
-        properties.setProperty(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
-        properties.setProperty(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG,StringDeserializer.class.getName());
-        properties.setProperty(ConsumerConfig.GROUP_ID_CONFIG,groupId);
-        //earliest/latest/none
-        properties.setProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG,"earliest");
-        properties.setProperty(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false"); //disable autocommit
-        properties.setProperty(ConsumerConfig.MAX_POLL_RECORDS_CONFIG,"100");
-
-
-        //create consumer
-        KafkaConsumer<String,String> kconsumer  = new KafkaConsumer<>(properties);
-        kconsumer.subscribe(Arrays.asList(topic));
-
-        return kconsumer;
-
-
+        return KafkaConsumerConfig.getConfigKafkaConsumer(topic);
     }
-
 
     private static RestHighLevelClient createClient()
     {

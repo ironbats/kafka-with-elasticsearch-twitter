@@ -31,9 +31,11 @@ public class ElasticSearchConsumer {
 
     private static JsonParser jsonParser =  new JsonParser();
 
+
     public ElasticSearchConsumer() {
 
     }
+
 
     public static void main(String[] args) throws IOException,InterruptedException {
 
@@ -42,7 +44,7 @@ public class ElasticSearchConsumer {
         KafkaConsumer<String,String> consumer = createConsumer("twitter-bolsonaro");
 
 
-        while(true) {
+        while(consumer != null ) {
 
             ConsumerRecords<String,String> records = consumer.poll(Duration.ofMillis(100));
 
@@ -54,7 +56,7 @@ public class ElasticSearchConsumer {
                 String id  = extractIdFromTweet(record.value());
 
                 //create datas
-                IndexRequest indexRequest = new IndexRequest("twitter", "tweets",id).
+                IndexRequest indexRequest = new IndexRequest("twitter2", "tweets2",id).
                         source(record.value(), XContentType.JSON);
 
                 IndexResponse indexResponse = client.index(indexRequest, RequestOptions.DEFAULT);
