@@ -12,8 +12,9 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.common.serialization.StringDeserializer;
+import org.elasticsearch.action.bulk.BulkRequest;
+import org.elasticsearch.action.bulk.BulkResponse;
 import org.elasticsearch.action.index.IndexRequest;
-import org.elasticsearch.action.index.IndexResponse;
 import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.client.RestClient;
 import org.elasticsearch.client.RestClientBuilder;
@@ -27,11 +28,11 @@ import java.time.Duration;
 import java.util.Arrays;
 import java.util.Properties;
 
-public class ElasticSearchConsumer {
+public class ElasticSearchConsumerV2 {
 
     private static JsonParser jsonParser =  new JsonParser();
 
-    public ElasticSearchConsumer() {
+    public ElasticSearchConsumerV2() {
 
     }
 
@@ -46,21 +47,44 @@ public class ElasticSearchConsumer {
 
             ConsumerRecords<String,String> records = consumer.poll(Duration.ofMillis(100));
 
+            Integer recordsCount  = records.count();
+            LOG.info("received  " + recordsCount + " records ");
+
+            BulkRequest bulkRequest = new BulkRequest();
+
+
+
             for(ConsumerRecord<String,String> record : records) {
 
                 //2 strategies to generate id
                 //1  - kafka generic ID
                 //String  kafkaId = record.topic() + record.partition() + record.offset();
-                String id  = extractIdFromTweet(record.value());
 
-                //create datas
-                IndexRequest indexRequest = new IndexRequest("twitter", "tweets",id).
-                        source(record.value(), XContentType.JSON);
+                try
+                {
+                    String id  = extractIdFromTweet(record.value());
 
-                IndexResponse indexResponse = client.index(indexRequest, RequestOptions.DEFAULT);
-                LOG.info(indexResponse.getId());
+                    //create datas
+                    IndexRequest indexRequest = new IndexRequest("twitter", "tweets",id).
+                            source(record.value(), XContentType.JSON);
+
+                    bulkRequest.add(indexRequest);
+
+                }catch(NullPointerException cause)
+                {
+                  LOG.error("Skiping bad data " + record.value());
+                }
+
+            }
+
+            if(recordsCount > 0) {
+
+                BulkResponse bulkResponse = client.bulk(bulkRequest, RequestOptions.DEFAULT);
+
+                LOG.info("commiting offsets ");
+                consumer.commitSync();
+                LOG.info("Offsets have been commited ");
                 Thread.sleep(1000);
-
             }
 
         }
@@ -89,6 +113,8 @@ public class ElasticSearchConsumer {
         properties.setProperty(ConsumerConfig.GROUP_ID_CONFIG,groupId);
         //earliest/latest/none
         properties.setProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG,"earliest");
+        properties.setProperty(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false"); //disable autocommit
+        properties.setProperty(ConsumerConfig.MAX_POLL_RECORDS_CONFIG,"100");
 
 
         //create consumer
